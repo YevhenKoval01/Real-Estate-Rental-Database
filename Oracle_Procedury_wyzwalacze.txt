@@ -1,0 +1,225 @@
+
+DROP TRIGGER Sprawdzenie_okresUmowy;
+DROP TRIGGER sprawdz_i_przypisz_wolny_dom;
+
+DROP PROCEDURE KorektaCenDlaLokalizacji;
+DROP PROCEDURE KorekcjaUmowy;
+
+
+/*Przy wstawianiu lub aktualizacji umowy wyzwalacz automatycznie wydłuża okres umowy do miesiąca, jeśli jest krótszy, oraz skraca go do maksymalnie 3 lat, jeśli jest dłuższy. Dodatkowo, 
+jeśli cena wynajmu jest poniżej 1000 zł, zostaje ustawiona na tę wartość. W przypadku lokalizacji "Warszawa" okres umowy jest wydłużany o miesiąc, pod warunkiem że nie przekroczy 3 lat.*/
+
+CREATE OR REPLACE TRIGGER Sprawdzenie_okresUmowy
+BEFORE INSERT OR UPDATE ON Umowa_o_wynajem
+FOR EACH ROW
+DECLARE
+  v_max_date DATE;
+  v_lokalizacja VARCHAR2(20);
+  v_org_data_zak DATE;
+  v_org_cena NUMBER;
+BEGIN
+  v_org_data_zak := :NEW.Data_Zakonczenia;
+  v_org_cena := :NEW.Cena_Wynajmu;
+  v_max_date := :NEW.Data_Rozpoczecia + 1095;
+
+  IF :NEW.Data_Zakonczenia - :NEW.Data_Rozpoczecia < 30 THEN
+  :NEW.Data_Zakonczenia := :NEW.Data_Rozpoczecia + 30;
+  DBMS_OUTPUT.PUT_LINE('Umowa została wydłużona do minimalnego okresu (30 dni).');
+  END IF;
+
+  IF :NEW.Data_Zakonczenia > v_max_date THEN
+  :NEW.Data_Zakonczenia := v_max_date;
+  DBMS_OUTPUT.PUT_LINE('Umowa została skrócona do maksymalnego okresu (3 lata).');
+  END IF;
+
+  IF :NEW.Cena_Wynajmu < 1000 THEN
+  :NEW.Cena_Wynajmu := 1000;
+  DBMS_OUTPUT.PUT_LINE('Cena wynajmu została podniesiona do minimalnej wartości (1000).');
+  END IF;
+
+  SELECT p.Lokalizacja
+  INTO v_lokalizacja
+  FROM Dom d
+  JOIN Przestrzen p ON d.Nieruchomosc_ID = p.ID_Przestrzen
+  WHERE d.ID_Domu = :NEW.Dom_ID_Domu;
+
+  IF v_lokalizacja = 'Warszawa' THEN
+  IF :NEW.Data_Zakonczenia + 30 <= v_max_date THEN
+  :NEW.Data_Zakonczenia := :NEW.Data_Zakonczenia + 30;
+  DBMS_OUTPUT.PUT_LINE('Umowa została wydłużona o dodatkowe 30 dni (lokalizacja: Warszawa).');
+  ELSE
+  :NEW.Data_Zakonczenia := v_max_date;
+  END IF;
+  END IF;
+  
+  IF :NEW.Data_Zakonczenia != v_org_data_zak THEN
+  DBMS_OUTPUT.PUT_LINE('Zmieniono datę zakończenia umowy: ' || TO_CHAR(v_org_data_zak, 'YYYY-MM-DD') || 
+  ' -> ' || TO_CHAR(:NEW.Data_Zakonczenia, 'YYYY-MM-DD'));
+  END IF;
+
+  IF :NEW.Cena_Wynajmu != v_org_cena THEN
+  DBMS_OUTPUT.PUT_LINE('Zmieniono cenę wynajmu: ' || v_org_cena || ' -> ' || :NEW.Cena_Wynajmu);
+  END IF;
+END;
+/
+
+
+/*wyzwalacz przed wstawieniem lub aktualizacją umowy o wynajem sprawdza, czy wybrany dom jest dostępny w zadanym okresie, jeśli nie, to przypisuje pierwszy wolny dom z tej samej przestrzeni.*/
+
+CREATE OR REPLACE TRIGGER sprawdz_i_przypisz_wolny_dom
+BEFORE INSERT OR UPDATE ON Umowa_o_wynajem
+FOR EACH ROW
+DECLARE
+    v_max_date NUMBER;
+    v_free_dom_id NUMBER := NULL; 
+    v_przestrzen_id NUMBER; 
+BEGIN
+    SELECT COUNT(*)
+    INTO v_max_date
+    FROM Umowa_o_wynajem
+    WHERE Dom_ID_Domu = :NEW.Dom_ID_Domu
+    AND (:NEW.Data_rozpoczecia BETWEEN Data_Rozpoczecia AND NVL(Data_Zakonczenia, SYSDATE + 1)
+          OR :NEW.Data_zakonczenia BETWEEN Data_Rozpoczecia AND NVL(Data_Zakonczenia, SYSDATE + 1)
+          OR Data_Rozpoczecia BETWEEN :NEW.Data_rozpoczecia AND :NEW.Data_zakonczenia );
+
+    IF v_max_date > 0 THEN
+    SELECT p.ID_Przestrzen
+    INTO v_przestrzen_id
+    FROM Dom d
+    JOIN Przestrzen p ON d.Nieruchomosc_ID = p.ID_Przestrzen
+    WHERE d.ID_Domu = :NEW.Dom_ID_Domu;
+    BEGIN
+        SELECT d.ID_Domu
+        INTO v_free_dom_id
+        FROM Dom d
+        WHERE d.Nieruchomosc_ID = v_przestrzen_id
+        AND NOT EXISTS (SELECT 1
+        FROM Umowa_o_wynajem u
+        WHERE u.Dom_ID_Domu = d.ID_Domu
+        AND (:NEW.Data_rozpoczecia BETWEEN u.Data_Rozpoczecia AND NVL(u.Data_Zakonczenia, SYSDATE + 1)
+             OR :NEW.Data_zakonczenia BETWEEN u.Data_Rozpoczecia AND NVL(u.Data_Zakonczenia, SYSDATE + 1)
+             OR u.Data_Rozpoczecia BETWEEN :NEW.Data_rozpoczecia AND :NEW.Data_zakonczenia))
+            FETCH FIRST ROW ONLY;
+        EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+        v_free_dom_id := NULL;
+        END;
+        IF v_free_dom_id IS NOT NULL THEN
+        :NEW.Dom_ID_Domu := v_free_dom_id;
+        DBMS_OUTPUT.PUT_LINE('Dom przypisany: ' || v_free_dom_id);
+        ELSE
+        DBMS_OUTPUT.PUT_LINE('Dom w tym terminie jest zajęty. Brak dostępnych wolnych domów w tej samej przestrzeni na dany okres.');
+        RAISE_APPLICATION_ERROR(-20004, 'Brak dostępnych wolnych domów w tej samej przestrzeni na dany okres.');
+        END IF;
+    END IF;
+END;
+/
+
+
+/*Podajemy w argumencie lokalizacje(czyli miasto). I jeśli średnia cena wynajmu dla tej lokalizacji jest na conajmniej 15% niższa od ogólnej średniej ze wszytkich miast to zwiększycz ją o 10%, jeśli na 25% lub więcej to zwiększycz cene wynajmu na 20%*/
+CREATE OR REPLACE PROCEDURE KorektaCenDlaLokalizacji (v_miasto IN VARCHAR2) 
+IS
+  v_srednia_globalna NUMBER;
+  v_srednia_lokalna NUMBER;
+  CURSOR domy_cursor IS
+    SELECT d.ID_Domu, u.Cena_Wynajmu
+    FROM Przestrzen p
+    JOIN Dom d ON p.ID_Przestrzen = d.Nieruchomosc_ID
+    JOIN Umowa_o_wynajem u ON d.ID_Domu = u.Dom_ID_Domu
+    WHERE p.Lokalizacja = v_miasto;
+  v_id_domu Dom.ID_Domu%TYPE;
+  v_cena_wynajmu Umowa_o_wynajem.Cena_Wynajmu%TYPE;
+BEGIN
+  SELECT AVG(Cena_Wynajmu)
+  INTO v_srednia_globalna
+  FROM Umowa_o_wynajem;
+  SELECT AVG(u.Cena_Wynajmu)
+  INTO v_srednia_lokalna
+  FROM Przestrzen p
+  JOIN Dom d ON p.ID_Przestrzen = d.Nieruchomosc_ID
+  JOIN Umowa_o_wynajem u ON d.ID_Domu = u.Dom_ID_Domu
+  WHERE p.Lokalizacja = v_miasto;
+  IF v_srednia_lokalna < v_srednia_globalna * 0.75 THEN
+  DBMS_OUTPUT.PUT_LINE('Zwiększamy ceny wynajmu o 20% dla lokalizacji: ' || v_miasto);
+  OPEN domy_cursor;
+  LOOP
+    FETCH domy_cursor INTO v_id_domu, v_cena_wynajmu;
+    EXIT WHEN domy_cursor%NOTFOUND;
+    UPDATE Umowa_o_wynajem
+    SET Cena_Wynajmu = v_cena_wynajmu * 1.20
+    WHERE Dom_ID_Domu = v_id_domu;
+    DBMS_OUTPUT.PUT_LINE('Zwiększono cenę dla domu ID: ' || v_id_domu);
+    END LOOP;
+    CLOSE domy_cursor;
+  ELSIF v_srednia_lokalna < v_srednia_globalna * 0.85 THEN
+    DBMS_OUTPUT.PUT_LINE('Zwiększamy ceny wynajmu o 10% dla lokalizacji: ' || v_miasto);
+    OPEN domy_cursor;
+    LOOP
+      FETCH domy_cursor INTO v_id_domu, v_cena_wynajmu;
+      EXIT WHEN domy_cursor%NOTFOUND;
+      UPDATE Umowa_o_wynajem
+      SET Cena_Wynajmu = v_cena_wynajmu * 1.10
+      WHERE Dom_ID_Domu = v_id_domu;
+      DBMS_OUTPUT.PUT_LINE('Zwiększono cenę dla domu ID: ' || v_id_domu);
+    END LOOP;
+    CLOSE domy_cursor;
+  ELSE
+  DBMS_OUTPUT.PUT_LINE('Nie ma potrzeby korekty cen dla lokalizacji: ' || v_miasto);
+  END IF;
+END;
+/
+
+/*Procedura przyjmuje PESEL agenta nieruchomości, liczbę miesięcy na przedłużenie umowy oraz kwotę zwiększenia ceny wynajmu dla umów przypisanych do tego agenta. Jeśli okres trwania umowy wynosi co najmniej 4 miesięcy, przedłuża ją o podaną liczbę miesięcy i zwiększa cenę wynajmu o tą kwotę*/
+
+CREATE OR REPLACE PROCEDURE KorekcjaUmowy (v_pesel_agenta IN INTEGER, v_liczba_miesiecy IN NUMBER, v_zwiekszenie_ceny IN NUMBER) 
+IS
+  CURSOR umowy_cursor IS
+    SELECT ID_Umowy, Cena_Wynajmu, Data_rozpoczecia, Data_zakonczenia
+    FROM Umowa_o_wynajem
+    WHERE Agent_nieruchomosci_Pesel = v_pesel_agenta;
+
+  v_id_umowy Umowa_o_wynajem.ID_Umowy%TYPE;
+  v_cena_wynajmu Umowa_o_wynajem.Cena_Wynajmu%TYPE;
+  v_data_rozpoczecia Umowa_o_wynajem.Data_rozpoczecia%TYPE;
+  v_data_zakonczenia Umowa_o_wynajem.Data_zakonczenia%TYPE;
+  v_znaleziono BOOLEAN := FALSE;
+  v_trwanie_umowy NUMBER; 
+BEGIN
+  OPEN umowy_cursor;
+  FETCH umowy_cursor INTO v_id_umowy, v_cena_wynajmu, v_data_rozpoczecia, v_data_zakonczenia;
+  IF umowy_cursor%NOTFOUND THEN
+  DBMS_OUTPUT.PUT_LINE('Brak umów dla agenta o numerze PESEL: ' || v_pesel_agenta);
+  CLOSE umowy_cursor;
+  RETURN;
+  END IF;
+  LOOP
+    v_znaleziono := TRUE;
+    FETCH umowy_cursor INTO v_id_umowy, v_cena_wynajmu, v_data_rozpoczecia, v_data_zakonczenia;
+    EXIT WHEN umowy_cursor%NOTFOUND;
+    
+    v_trwanie_umowy := MONTHS_BETWEEN(v_data_zakonczenia, v_data_rozpoczecia);
+
+    IF v_trwanie_umowy < 4 THEN
+    DBMS_OUTPUT.PUT_LINE('Pominięto umowę ID: ' || v_id_umowy || ' (trwa mniej niż 4 miesiące)');
+    CONTINUE;
+    END IF;
+    UPDATE Umowa_o_wynajem
+    SET Cena_Wynajmu = v_cena_wynajmu + v_zwiekszenie_ceny, Data_zakonczenia = ADD_MONTHS(v_data_zakonczenia, v_liczba_miesiecy)
+    WHERE ID_Umowy = v_id_umowy;
+
+    DBMS_OUTPUT.PUT_LINE('Zaktualizowano umowę ID: ' || v_id_umowy || ', Nowa cena: ' || (v_cena_wynajmu + v_zwiekszenie_ceny) || ', Nowa data zakończenia: ' || ADD_MONTHS(v_data_zakonczenia, v_liczba_miesiecy));
+  END LOOP;
+  
+  CLOSE umowy_cursor;
+
+  IF NOT v_znaleziono THEN
+  DBMS_OUTPUT.PUT_LINE('Brak umów spełniających warunki dla agenta o numerze PESEL: ' || v_pesel_agenta);
+  ELSE
+  DBMS_OUTPUT.PUT_LINE('Zakończono aktualizację umów dla agenta o numerze PESEL: ' || v_pesel_agenta);
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+   DBMS_OUTPUT.PUT_LINE('Wystąpił błąd');
+   ROLLBACK;
+END;
+/
