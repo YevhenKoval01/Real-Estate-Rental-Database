@@ -1,6 +1,6 @@
 # Real Estate Rental Database
 
-A first-semester relational database project for a small real estate rental system. It models people and their roles, properties, houses, and rental agreements. The same logical model is provided for Microsoft SQL Server and Oracle Database.
+A third-semester relational database project for a small real estate rental system. It models people and their roles, properties, houses, and rental agreements. The same logical model is provided for Microsoft SQL Server and Oracle Database.
 
 ## Project scope
 
