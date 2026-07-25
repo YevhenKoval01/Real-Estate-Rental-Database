@@ -1,21 +1,12 @@
-
-ALTER TABLE Umowa_o_wynajem DROP CONSTRAINT Umowa_o_wynajem_Agent_nieruchomosci;
-ALTER TABLE Umowa_o_wynajem DROP CONSTRAINT Umowa_o_wynajem_Dom;
-ALTER TABLE Umowa_o_wynajem DROP CONSTRAINT Umowa_o_wynajem_Najemca;
-ALTER TABLE Agent_nieruchomosci DROP CONSTRAINT Agent_nieruchomosci_Osoba;
-ALTER TABLE Dom DROP CONSTRAINT Dom_Przestrzen;
-ALTER TABLE Najemca DROP CONSTRAINT Najemca_Osoba;
-ALTER TABLE Przestrzen DROP CONSTRAINT Przestrzen_Wlasciciel;
-ALTER TABLE Wlasciciel DROP CONSTRAINT Wlasciciel_Osoba;
-
-DROP TABLE Umowa_o_wynajem;
-DROP TABLE Agent_nieruchomosci;
-DROP TABLE Dom;
-DROP TABLE Najemca;
-DROP TABLE Przestrzen;
-DROP TABLE Wlasciciel;
-DROP TABLE Osoba;
-
+-- Reset the demo schema in dependency order so the script can be rerun.
+DROP TABLE IF EXISTS Umowa_o_wynajem;
+DROP TABLE IF EXISTS Dom;
+DROP TABLE IF EXISTS Przestrzen;
+DROP TABLE IF EXISTS Agent_nieruchomosci;
+DROP TABLE IF EXISTS Najemca;
+DROP TABLE IF EXISTS Wlasciciel;
+DROP TABLE IF EXISTS Osoba;
+GO
 
 -- Created by Vertabelo (http://vertabelo.com)
 -- Last modification date: 2024-12-30 16:22:38.043
@@ -184,6 +175,7 @@ INSERT INTO Umowa_o_wynajem (ID_Umowy, Cena_Wynajmu, Data_rozpoczecia, Data_zako
 VALUES (3, 3000, CONVERT(DATE, '2024-02-01', 120), CONVERT(DATE, '2024-12-31', 120), 89012345678, 56789012345, 3);
 INSERT INTO Umowa_o_wynajem (ID_Umowy, Cena_Wynajmu, Data_rozpoczecia, Data_zakonczenia, Najemca_Pesel, Agent_nieruchomosci_Pesel, Dom_ID_Domu)
 VALUES (4, 2800, CONVERT(DATE, '2023-03-01', 120), CONVERT(DATE, '2024-03-31', 120), 90123456789, 56789012345, 4);
+GO
 
 
 --1 Znajdź wszystkich właścicieli, którzy mają przynajmniej jedną nieruchomość o powierzchni większej niż 100 m², i wyświetl ich imiona, nazwiska oraz staż.

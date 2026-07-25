@@ -1,0 +1,15 @@
+# Database client files
+*.log
+*.bak
+*.tmp
+
+# Local tooling
+.venv/
+tmp/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

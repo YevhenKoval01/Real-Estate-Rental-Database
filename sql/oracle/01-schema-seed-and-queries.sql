@@ -1,22 +1,5 @@
-ALTER TABLE Umowa_o_wynajem DROP CONSTRAINT Umowa_Agent_nieruchomosci;
-ALTER TABLE Umowa_o_wynajem DROP CONSTRAINT Umowa_o_wynajem_Dom;
-ALTER TABLE Umowa_o_wynajem DROP CONSTRAINT Umowa_o_wynajem_Najemca;
-ALTER TABLE Przestrzen DROP CONSTRAINT Nieruchomosc_Wlasciciel;
-ALTER TABLE Dom DROP CONSTRAINT Dom_Nieruchomosc;
-ALTER TABLE Agent_nieruchomosci DROP CONSTRAINT Agent_nieruchomosci_Osoba;
-ALTER TABLE Najemca DROP CONSTRAINT Najemca_Osoba;
-ALTER TABLE Wlasciciel DROP CONSTRAINT Wlasciciel_Osoba;
-
-DROP TABLE Umowa_o_wynajem CASCADE CONSTRAINTS;
-DROP TABLE Dom CASCADE CONSTRAINTS;
-DROP TABLE Przestrzen CASCADE CONSTRAINTS;
-DROP TABLE Agent_nieruchomosci CASCADE CONSTRAINTS;
-DROP TABLE Najemca CASCADE CONSTRAINTS;
-DROP TABLE Wlasciciel CASCADE CONSTRAINTS;
-DROP TABLE Osoba CASCADE CONSTRAINTS;
-
-
-
+-- Run this script in a new or empty Oracle schema.
+-- The schema, sample data, and example queries are intentionally kept together.
 
 -- Created by Vertabelo (http://vertabelo.com)
 -- Last modification date: 2024-12-25 20:42:40.77
@@ -186,6 +169,8 @@ VALUES (3, 3000, TO_DATE('2024-02-01', 'YYYY-MM-DD'), TO_DATE('2024-12-31', 'YYY
 INSERT INTO Umowa_o_wynajem (ID_Umowy, Cena_Wynajmu, Data_rozpoczecia, Data_zakonczenia, Najemca_Pesel, Agent_nieruchomosci_Pesel, Dom_ID_Domu)
 VALUES (4, 2800, TO_DATE('2023-03-01', 'YYYY-MM-DD'), TO_DATE('2024-03-31', 'YYYY-MM-DD'), 90123456789, 56789012345, 4);
 
+COMMIT;
+
 --1 Znajdź wszystkich właścicieli, którzy mają przynajmniej jedną nieruchomość o powierzchni większej niż 100 m², i wyświetl ich imiona, nazwiska oraz staż.
 SELECT Osoba.Imie, Osoba.Nazwisko, Wlasciciel.Staz
 FROM Osoba
@@ -259,7 +244,10 @@ FROM Wlasciciel w
 JOIN Osoba o ON w.Osoba_Pesel = o.Pesel
 JOIN Przestrzen p ON w.Osoba_Pesel = p.Wlasciciel_Osoba_Pesel
 GROUP BY o.Imie, o.Nazwisko
-HAVING MAX(p.Powierzchnia) > (SELECT AVG(Powierzchnia)FROM Przestrzen);
+HAVING MAX(p.Powierzchnia) > (
+    SELECT AVG(Powierzchnia)
+    FROM Przestrzen
+);
 
 --10 Pokaż imiona i nazwiska najemców, których średnia cena wynajmu jest wyższa niż średnia cena wynajmu dla wszystkich najemców.
 SELECT o.Imie, o.Nazwisko

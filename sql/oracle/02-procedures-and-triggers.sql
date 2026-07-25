@@ -1,10 +1,4 @@
-
-DROP TRIGGER Sprawdzenie_okresUmowy;
-DROP TRIGGER sprawdz_i_przypisz_wolny_dom;
-
-DROP PROCEDURE KorektaCenDlaLokalizacji;
-DROP PROCEDURE KorekcjaUmowy;
-
+-- Optional Oracle extensions. CREATE OR REPLACE makes this script rerunnable.
 
 /*Przy wstawianiu lub aktualizacji umowy wyzwalacz automatycznie wydłuża okres umowy do miesiąca, jeśli jest krótszy, oraz skraca go do maksymalnie 3 lat, jeśli jest dłuższy. Dodatkowo, 
 jeśli cena wynajmu jest poniżej 1000 zł, zostaje ustawiona na tę wartość. W przypadku lokalizacji "Warszawa" okres umowy jest wydłużany o miesiąc, pod warunkiem że nie przekroczy 3 lat.*/

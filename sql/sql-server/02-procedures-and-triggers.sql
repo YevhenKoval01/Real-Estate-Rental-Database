@@ -1,9 +1,9 @@
-DROP PROCEDURE bonus_dla_osoby;
-DROP PROCEDURE ZmienCeneWynajmuWZakresieDat;
-
-DROP TRIGGER zmiana_kosztu_utrymania;
-DROP TRIGGER Przypisz_Umowe_Innemu_Agentowi;
-
+DROP PROCEDURE IF EXISTS bonus_dla_osoby;
+DROP PROCEDURE IF EXISTS ZmienCeneWynajmuWZakresieDat;
+GO
+DROP TRIGGER IF EXISTS zmiana_kosztu_utrymania;
+DROP TRIGGER IF EXISTS Przypisz_Umowe_Innemu_Agentowi;
+GO
 
 /*Procedura zwiększa cenę wynajmu o procent podany w parametrze dla aktywnych umów, które zostały zawarte w okresie między dwiema określonymi datami, sprawdzając, czy data zakończenia umowy jest późniejsza niż dzisiejsza. Dodatkowo, cena wynajmu jest zwiększana o zadany procent tylko wtedy, gdy dom związany z umową ma koszt utrzymania niższy niż wartość podana w parametrze*/
 
@@ -53,6 +53,7 @@ END;
 
 /*Procedura przyznaje bonus osobie na podstawie jej roli (właściciela lub najemcy) przez zwiększenie ceny rynkowej domów o 2% dla właścicieli i 
 zmniejszenie ceny wynajmu o 10% dla najemców, identyfikujac osobę po imieniu i nazwisku (załóżmy że imienia i nazwiska są niepowtarzalne).*/
+GO
 CREATE PROCEDURE bonus_dla_osoby
     @imie VARCHAR(20),
     @nazwisko VARCHAR(20)
@@ -94,6 +95,7 @@ END;
 
 /*wyzwalacz monitoruje zmiany w tabeli Dom dotyczące kosztu utrzymania nieruchomości. Po zaktualizowaniu tego kosztu, jeśli nowy koszt przekroczy ustalony próg 1000, wyzwalacz automatycznie zwiększa cenę wynajmu dla wszystkich powiązanych umów o 5%*/
 
+GO
 CREATE TRIGGER zmiana_kosztu_utrymania
 ON Dom
 AFTER UPDATE
@@ -134,6 +136,7 @@ END;
 
 /*Wyzwalacz przypisuje domy usuniętej umowy wynajmu do pierwszego agenta z tej samej firmy, który ma aktywne umowy. Działa to tylko w przypadku, gdy agent związany z usuniętą umową nie ma już innych aktywnych umów, zapewniając, że domy nie zostaną pozostawione bez przypisanego agenta, ale tylko wtedy, gdy do umowy przypisany jest agent.*/
 
+GO
 CREATE TRIGGER Przypisz_Umowe_Innemu_Agentowi
 ON Umowa_o_wynajem
 AFTER DELETE, UPDATE
