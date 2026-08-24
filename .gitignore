@@ -4,11 +4,23 @@
 !.env.example
 
 # Generated data and database state
+data/source/
 data/bronze/
 data/silver/
+data/quality/
 data/rejected/
 postgres-data/
 *.parquet
+
+# dbt and Airflow runtime state
+warehouse/dbt/target/
+warehouse/dbt/logs/
+warehouse/dbt/dbt_packages/
+warehouse/dbt/.user.yml
+airflow/logs/
+airflow/*.db
+airflow/airflow.cfg
+airflow/webserver_config.py
 
 # Python tooling and build output
 .venv/

@@ -1,14 +1,14 @@
 import logging
 import os
 import sys
-from decimal import Decimal
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from rental_platform.config import Settings
 from rental_platform.errors import PipelineError
+from rental_platform.quality import QualityResult, assess_quality, write_quality_artifacts
 from rental_platform.types import ENTITY_ORDER, Dataset
-from rental_platform.validation import validate_and_normalize
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,20 +21,40 @@ def _spark_schemas() -> dict[str, Any]:
         StringType,
         StructField,
         StructType,
+        TimestampType,
     )
 
     text = StringType()
     money = DecimalType(12, 2)
     size = DecimalType(10, 2)
+    metadata = (
+        ("batch_id", text),
+        ("record_fingerprint", text),
+        ("processed_at", TimestampType()),
+    )
     schemas = {
         "locations": (
             ("location_id", text),
             ("city", text),
             ("region", text),
             ("country_code", text),
+            ("source_timestamp", TimestampType()),
+            *metadata,
         ),
-        "owners": (("owner_id", text), ("full_name", text), ("email", text)),
-        "tenants": (("tenant_id", text), ("full_name", text), ("email", text)),
+        "owners": (
+            ("owner_id", text),
+            ("full_name", text),
+            ("email", text),
+            ("source_timestamp", TimestampType()),
+            *metadata,
+        ),
+        "tenants": (
+            ("tenant_id", text),
+            ("full_name", text),
+            ("email", text),
+            ("source_timestamp", TimestampType()),
+            *metadata,
+        ),
         "properties": (
             ("property_id", text),
             ("location_id", text),
@@ -44,6 +64,8 @@ def _spark_schemas() -> dict[str, Any]:
             ("size_sqm", size),
             ("monthly_rent", money),
             ("currency", text),
+            ("source_timestamp", TimestampType()),
+            *metadata,
         ),
         "rental_agreements": (
             ("agreement_id", text),
@@ -53,6 +75,8 @@ def _spark_schemas() -> dict[str, Any]:
             ("end_date", DateType()),
             ("monthly_rent", money),
             ("status", text),
+            ("source_timestamp", TimestampType()),
+            *metadata,
         ),
         "payments": (
             ("payment_id", text),
@@ -61,6 +85,8 @@ def _spark_schemas() -> dict[str, Any]:
             ("payment_date", DateType()),
             ("amount", money),
             ("status", text),
+            ("source_timestamp", TimestampType()),
+            *metadata,
         ),
     }
     return {
@@ -76,7 +102,7 @@ def _create_spark(settings: Settings) -> Any:
 
     os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
     return (
-        SparkSession.builder.appName("rental-platform-stage1")
+        SparkSession.builder.appName("rental-platform-stage2")
         .master(settings.spark_master)
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.sql.shuffle.partitions", "2")
@@ -88,38 +114,51 @@ def _create_spark(settings: Settings) -> Any:
 def _read_bronze_with_spark(spark: Any, bronze_path: Path) -> Dataset:
     data: Dataset = {}
     for entity in ENTITY_ORDER:
-        if entity == "payments":
-            path = bronze_path / "payments.jsonl"
-        else:
-            path = bronze_path / f"{entity}.csv"
+        path = bronze_path / ("payments.jsonl" if entity == "payments" else f"{entity}.csv")
         if not path.is_file():
             raise PipelineError(f"Required Bronze file does not exist: {path}")
         if entity == "payments":
-            reader = spark.read.json(str(path))
+            frame = spark.read.json(str(path))
         else:
-            reader = spark.read.option("header", True).option("inferSchema", False).csv(str(path))
-        data[entity] = [row.asDict(recursive=True) for row in reader.collect()]
+            frame = spark.read.option("header", True).option("inferSchema", False).csv(str(path))
+        data[entity] = [row.asDict(recursive=True) for row in frame.collect()]
     return data
 
 
-def transform_bronze_to_silver(settings: Settings) -> Dataset:
-    """Use PySpark to read Bronze files and write validated Silver Parquet datasets."""
+def transform_bronze_to_silver(
+    settings: Settings,
+    *,
+    batch_id: str,
+    processed_at: datetime | None = None,
+) -> QualityResult:
+    """Read Bronze with Spark, quarantine invalid rows, and write accepted Parquet."""
 
     spark = None
     try:
         spark = _create_spark(settings)
         spark.sparkContext.setLogLevel("WARN")
         raw = _read_bronze_with_spark(spark, settings.bronze_path)
-        normalized = validate_and_normalize(raw)
+        quality = assess_quality(raw, batch_id=batch_id, processed_at=processed_at)
         schemas = _spark_schemas()
         for entity in ENTITY_ORDER:
             output_path = settings.silver_path / entity
-            frame = spark.createDataFrame(normalized[entity], schema=schemas[entity])
+            frame = spark.createDataFrame(quality.accepted[entity], schema=schemas[entity])
             frame.coalesce(1).write.mode("overwrite").parquet(str(output_path))
             LOGGER.info(
-                "Wrote Silver Parquet entity=%s records=%d", entity, len(normalized[entity])
+                "Wrote Silver Parquet entity=%s records=%d",
+                entity,
+                len(quality.accepted[entity]),
             )
-        return normalized
+        write_quality_artifacts(quality, settings.quality_path, settings.rejected_path)
+        LOGGER.info(
+            "Quality assessment batch_id=%s input=%d accepted=%d rejected=%d reasons=%s",
+            batch_id,
+            quality.input_count,
+            quality.accepted_count,
+            quality.rejected_count,
+            quality.reason_counts,
+        )
+        return quality
     except PipelineError:
         raise
     except Exception as exc:
@@ -129,7 +168,26 @@ def transform_bronze_to_silver(settings: Settings) -> Dataset:
             spark.stop()
 
 
-def decimal_is_supported(value: object) -> bool:
-    """Expose the Silver numeric contract for a lightweight unit check."""
+def read_silver(settings: Settings) -> Dataset:
+    """Read the current Silver Parquet datasets for an independently scheduled load task."""
 
-    return isinstance(value, Decimal)
+    spark = None
+    try:
+        spark = _create_spark(settings)
+        spark.sparkContext.setLogLevel("WARN")
+        data: Dataset = {}
+        for entity in ENTITY_ORDER:
+            path = settings.silver_path / entity
+            if not path.is_dir():
+                raise PipelineError(f"Required Silver dataset does not exist: {path}")
+            data[entity] = [
+                row.asDict(recursive=True) for row in spark.read.parquet(str(path)).collect()
+            ]
+        return data
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(f"Could not read Silver Parquet: {exc}") from exc
+    finally:
+        if spark is not None:
+            spark.stop()

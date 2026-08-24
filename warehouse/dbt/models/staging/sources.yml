@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: rental_staging
+    description: Accepted, fingerprinted rental records loaded by the Python pipeline.
+    schema: staging
+    tables:
+      - name: locations
+        description: Canonical property locations.
+      - name: owners
+        description: Property owners.
+      - name: tenants
+        description: Rental tenants.
+      - name: properties
+        description: Current property attributes and asking rent.
+      - name: rental_agreements
+        description: Agreements connecting properties and tenants.
+      - name: payments
+        description: Scheduled and settled rent payments.
+      - name: pipeline_runs
+        description: Auditable pipeline batch outcomes.
+      - name: rejected_records
+        description: Quarantined source rows with reason codes.

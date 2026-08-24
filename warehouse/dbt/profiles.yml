@@ -1,0 +1,13 @@
+rental_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('RENTAL_POSTGRES_HOST', 'localhost') }}"
+      port: "{{ env_var('RENTAL_POSTGRES_PORT', '5432') | int }}"
+      user: "{{ env_var('RENTAL_POSTGRES_USER', 'rental') }}"
+      password: "{{ env_var('RENTAL_POSTGRES_PASSWORD', 'rental_dev') }}"
+      dbname: "{{ env_var('RENTAL_POSTGRES_DATABASE', 'rental_analytics') }}"
+      schema: analytics
+      threads: 2
+      connect_timeout: 10

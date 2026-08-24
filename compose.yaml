@@ -11,7 +11,7 @@ services:
       - "${RENTAL_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./warehouse/migrations/001_create_staging.sql:/docker-entrypoint-initdb.d/001_create_staging.sql:ro
+      - ./warehouse/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -33,14 +33,88 @@ services:
       RENTAL_POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}
       RENTAL_POSTGRES_PASSWORD: ${RENTAL_POSTGRES_PASSWORD:-rental_dev}
       RENTAL_POSTGRES_DATABASE: ${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+      RENTAL_SOURCE_PATH: /app/data/source
       RENTAL_BRONZE_PATH: /app/data/bronze
+      RENTAL_QUALITY_PATH: /app/data/quality
+      RENTAL_REJECTED_PATH: /app/data/rejected
       RENTAL_SILVER_PATH: /app/data/silver
       RENTAL_RANDOM_SEED: ${RENTAL_RANDOM_SEED:-42}
       RENTAL_DATASET_SIZE: ${RENTAL_DATASET_SIZE:-12}
+      RENTAL_QUALITY_ISSUE_COUNT: ${RENTAL_QUALITY_ISSUE_COUNT:-0}
+      RENTAL_RENT_ADJUSTMENT: ${RENTAL_RENT_ADJUSTMENT:-0}
       RENTAL_LOG_LEVEL: ${RENTAL_LOG_LEVEL:-INFO}
       RENTAL_SPARK_MASTER: local[*]
+      RENTAL_DBT_PROJECT_PATH: /app/warehouse/dbt
     volumes:
       - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dbt:
+    profiles: ["pipeline"]
+    build:
+      context: .
+      dockerfile: docker/pipeline.Dockerfile
+    entrypoint: ["dbt"]
+    command:
+      - build
+      - --project-dir
+      - /app/warehouse/dbt
+      - --profiles-dir
+      - /app/warehouse/dbt
+    environment:
+      RENTAL_POSTGRES_HOST: postgres
+      RENTAL_POSTGRES_PORT: 5432
+      RENTAL_POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}
+      RENTAL_POSTGRES_PASSWORD: ${RENTAL_POSTGRES_PASSWORD:-rental_dev}
+      RENTAL_POSTGRES_DATABASE: ${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow:
+    profiles: ["airflow"]
+    build:
+      context: .
+      dockerfile: docker/airflow.Dockerfile
+    command: standalone
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${RENTAL_POSTGRES_USER:-rental}:${RENTAL_POSTGRES_PASSWORD:-rental_dev}@postgres:5432/${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      RENTAL_POSTGRES_HOST: postgres
+      RENTAL_POSTGRES_PORT: 5432
+      RENTAL_POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}
+      RENTAL_POSTGRES_PASSWORD: ${RENTAL_POSTGRES_PASSWORD:-rental_dev}
+      RENTAL_POSTGRES_DATABASE: ${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+      RENTAL_SOURCE_PATH: /app/data/source
+      RENTAL_BRONZE_PATH: /app/data/bronze
+      RENTAL_QUALITY_PATH: /app/data/quality
+      RENTAL_REJECTED_PATH: /app/data/rejected
+      RENTAL_SILVER_PATH: /app/data/silver
+      RENTAL_SPARK_MASTER: local[*]
+      RENTAL_DBT_PROJECT_PATH: /app/warehouse/dbt
+      DBT_POSTGRES_HOST: postgres
+      DBT_POSTGRES_PORT: 5432
+      DBT_POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}
+      DBT_POSTGRES_PASSWORD: ${RENTAL_POSTGRES_PASSWORD:-rental_dev}
+      DBT_POSTGRES_DATABASE: ${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+    ports:
+      - "${AIRFLOW_PORT:-8080}:8080"
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
     depends_on:
       postgres:
         condition: service_healthy

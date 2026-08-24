@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rental-analytics-platform"
-version = "0.1.0"
+version = "0.2.0"
 description = "A reproducible rental analytics and data engineering platform"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -22,6 +22,13 @@ dev = [
     "pytest-cov>=6.2,<8",
     "ruff==0.16.4",
 ]
+warehouse = [
+    "dbt-core==1.11.14",
+    "dbt-postgres==1.11.0",
+]
+orchestration = [
+    "apache-airflow==2.11.2",
+]
 
 [project.scripts]
 rental-platform = "rental_platform.cli:entrypoint"
@@ -34,6 +41,7 @@ addopts = "--strict-markers -ra"
 testpaths = ["tests"]
 markers = [
     "integration: requires a running PostgreSQL service",
+    "airflow: requires the optional Airflow dependency",
 ]
 
 [tool.ruff]

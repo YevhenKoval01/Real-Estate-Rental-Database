@@ -27,6 +27,23 @@ def test_seed_changes_generated_values() -> None:
     assert build_source_data(5, 10) != build_source_data(5, 11)
 
 
+def test_larger_profile_preserves_existing_business_records() -> None:
+    smaller = build_source_data(12, 42)
+    larger = build_source_data(13, 42)
+
+    for entity, smaller_rows in smaller.items():
+        identifier_key = next(key for key in smaller_rows[0] if key.endswith("_id"))
+        larger_rows = {row[identifier_key]: row for row in larger[entity]}
+        for row in smaller_rows:
+            business_row = {key: value for key, value in row.items() if key != "source_timestamp"}
+            larger_business_row = {
+                key: value
+                for key, value in larger_rows[row[identifier_key]].items()
+                if key != "source_timestamp"
+            }
+            assert business_row == larger_business_row
+
+
 def test_development_profile_has_stable_counts_and_relationships() -> None:
     data = build_source_data(12, 42)
 

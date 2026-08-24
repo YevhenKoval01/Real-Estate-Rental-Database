@@ -1,0 +1,26 @@
+name: rental_analytics
+version: "0.2.0"
+config-version: 2
+
+profile: rental_analytics
+
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  rental_analytics:
+    staging:
+      +materialized: view
+      +schema: analytics_staging
+    intermediate:
+      +materialized: view
+      +schema: analytics_intermediate
+    gold:
+      +materialized: table
+      +schema: analytics
+    marts:
+      +materialized: view
+      +schema: analytics_marts

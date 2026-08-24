@@ -5,6 +5,14 @@ class PipelineError(RuntimeError):
     """Base error for an expected pipeline failure."""
 
 
+class RuleViolation(ValueError):
+    """A single record-level data-quality rule violation."""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class ValidationIssue:
     entity: str

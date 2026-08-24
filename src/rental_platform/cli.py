@@ -2,18 +2,35 @@ import argparse
 import logging
 import os
 from collections.abc import Sequence
+from decimal import Decimal
 
 from pydantic import ValidationError
 
-from rental_platform.bronze import read_bronze
 from rental_platform.config import Settings
 from rental_platform.errors import PipelineError
-from rental_platform.generator import generate_source_data
+from rental_platform.generator import generate_source_files, ingest_source_files
 from rental_platform.logging_config import configure_logging
-from rental_platform.pipeline import run_pipeline
-from rental_platform.validation import validate_and_normalize
+from rental_platform.pipeline import (
+    load_silver_batch,
+    publish_run_summary,
+    run_pipeline,
+    validate_bronze_batch,
+)
+from rental_platform.quality import create_batch_id
+from rental_platform.spark_pipeline import transform_bronze_to_silver
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--dataset-size", type=int)
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--quality-issues", type=int)
+    parser.add_argument("--rent-adjustment", type=Decimal)
+
+
+def _add_batch_argument(parser: argparse.ArgumentParser, *, required: bool = False) -> None:
+    parser.add_argument("--batch-id", required=required)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -22,17 +39,33 @@ def _parser() -> argparse.ArgumentParser:
         description="Rental Analytics & Data Engineering Platform",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("generate", "run"):
-        command_parser = subparsers.add_parser(command)
-        command_parser.add_argument("--dataset-size", type=int)
-        command_parser.add_argument("--seed", type=int)
-    run_parser = subparsers.choices["run"]
+
+    generate_parser = subparsers.add_parser("generate")
+    _add_profile_arguments(generate_parser)
+    _add_batch_argument(generate_parser)
+
+    subparsers.add_parser("ingest")
+
+    validate_parser = subparsers.add_parser("validate")
+    _add_batch_argument(validate_parser)
+
+    transform_parser = subparsers.add_parser("transform")
+    _add_batch_argument(transform_parser)
+
+    load_parser = subparsers.add_parser("load")
+    _add_batch_argument(load_parser, required=True)
+
+    run_parser = subparsers.add_parser("run")
+    _add_profile_arguments(run_parser)
+    _add_batch_argument(run_parser)
     run_parser.add_argument(
         "--skip-load",
         action="store_true",
-        help="create Bronze and Silver outputs without loading PostgreSQL",
+        help="create source, Bronze, quality, and Silver outputs without loading PostgreSQL",
     )
-    subparsers.add_parser("validate")
+
+    summary_parser = subparsers.add_parser("summary")
+    _add_batch_argument(summary_parser, required=True)
     return parser
 
 
@@ -42,6 +75,10 @@ def _settings_from_arguments(arguments: argparse.Namespace) -> Settings:
         overrides["dataset_size"] = arguments.dataset_size
     if getattr(arguments, "seed", None) is not None:
         overrides["random_seed"] = arguments.seed
+    if getattr(arguments, "quality_issues", None) is not None:
+        overrides["quality_issue_count"] = arguments.quality_issues
+    if getattr(arguments, "rent_adjustment", None) is not None:
+        overrides["rent_adjustment"] = arguments.rent_adjustment
     return Settings(**overrides)
 
 
@@ -51,18 +88,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         settings = _settings_from_arguments(arguments)
         configure_logging(settings.log_level)
+        batch_id = getattr(arguments, "batch_id", None) or create_batch_id()
         if arguments.command == "generate":
-            data = generate_source_data(settings)
+            data = generate_source_files(settings)
+            ingest_source_files(settings)
             LOGGER.info(
-                "Bronze generation completed path=%s records=%d",
-                settings.bronze_path,
+                "Source generation completed batch_id=%s path=%s records=%d",
+                batch_id,
+                settings.source_path,
                 sum(len(rows) for rows in data.values()),
             )
+        elif arguments.command == "ingest":
+            ingest_source_files(settings)
+            LOGGER.info("Source ingestion completed path=%s", settings.bronze_path)
         elif arguments.command == "validate":
-            data = validate_and_normalize(read_bronze(settings.bronze_path))
-            LOGGER.info("Bronze validation passed records=%d", sum(map(len, data.values())))
+            validate_bronze_batch(settings, batch_id)
+        elif arguments.command == "transform":
+            transform_bronze_to_silver(settings, batch_id=batch_id)
+        elif arguments.command == "load":
+            load_silver_batch(settings, batch_id)
+        elif arguments.command == "summary":
+            publish_run_summary(settings, batch_id)
         else:
-            run_pipeline(settings, skip_load=arguments.skip_load)
+            run_pipeline(
+                settings,
+                batch_id=batch_id,
+                skip_load=arguments.skip_load,
+            )
         return 0
     except (PipelineError, ValidationError, OSError, ValueError) as exc:
         LOGGER.error("Command failed: %s", exc)

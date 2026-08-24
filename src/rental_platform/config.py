@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import quote
 
@@ -22,12 +23,18 @@ class Settings(BaseSettings):
     postgres_password: SecretStr = SecretStr("rental_dev")
     postgres_database: str = "rental_analytics"
 
+    source_path: Path = Path("data/source")
     bronze_path: Path = Path("data/bronze")
+    quality_path: Path = Path("data/quality")
+    rejected_path: Path = Path("data/rejected")
     silver_path: Path = Path("data/silver")
     random_seed: int = 42
     dataset_size: int = Field(default=12, ge=1, le=100_000)
+    quality_issue_count: int = Field(default=0, ge=0, le=9)
+    rent_adjustment: Decimal = Field(default=Decimal("0"), ge=-100_000, le=100_000)
     log_level: str = "INFO"
     spark_master: str = "local[*]"
+    dbt_project_path: Path = Path("warehouse/dbt")
 
     @field_validator("postgres_host", "postgres_user", "postgres_database", "spark_master")
     @classmethod

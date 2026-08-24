@@ -1,0 +1,239 @@
+version: 2
+
+models:
+  - name: stg_locations
+    description: Clean current location records from PostgreSQL staging.
+    columns:
+      - name: location_id
+        description: Stable source location identifier.
+        tests: [unique, not_null]
+      - name: country_code
+        tests:
+          - accepted_values:
+              arguments:
+                values: [PL, DE, CZ, SK]
+
+  - name: stg_owners
+    description: Clean current property-owner records.
+    columns:
+      - name: owner_id
+        tests: [unique, not_null]
+      - name: email
+        tests: [not_null]
+
+  - name: stg_tenants
+    description: Clean current tenant records.
+    columns:
+      - name: tenant_id
+        tests: [unique, not_null]
+      - name: email
+        tests: [not_null]
+
+  - name: stg_properties
+    description: Current accepted property records with pipeline metadata.
+    columns:
+      - name: property_id
+        tests: [unique, not_null]
+      - name: location_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_locations')
+                field: location_id
+      - name: owner_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_owners')
+                field: owner_id
+      - name: property_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: [apartment, house, studio]
+      - name: record_fingerprint
+        tests: [not_null]
+
+  - name: stg_rental_agreements
+    description: Current accepted rental agreements.
+    columns:
+      - name: agreement_id
+        tests: [unique, not_null]
+      - name: property_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_properties')
+                field: property_id
+      - name: tenant_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_tenants')
+                field: tenant_id
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: [ACTIVE, EXPIRED, TERMINATED]
+
+  - name: stg_payments
+    description: Current accepted payment records.
+    columns:
+      - name: payment_id
+        tests: [unique, not_null]
+      - name: agreement_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_rental_agreements')
+                field: agreement_id
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: [PAID, PENDING, OVERDUE]
+
+  - name: int_agreements_enriched
+    description: Agreement grain enriched with property, owner, tenant, and location attributes.
+    columns:
+      - name: agreement_id
+        tests: [unique, not_null]
+
+  - name: int_payments_enriched
+    description: Payment grain enriched with agreement and property context.
+    columns:
+      - name: payment_id
+        tests: [unique, not_null]
+
+  - name: dim_date
+    description: Calendar dates covering the observed agreement period.
+    columns:
+      - name: date_key
+        tests: [unique, not_null]
+      - name: date_day
+        tests: [unique, not_null]
+
+  - name: dim_location
+    description: Location dimension.
+    columns:
+      - name: location_key
+        tests: [unique, not_null]
+      - name: location_id
+        tests: [unique, not_null]
+
+  - name: dim_owner
+    description: Property-owner dimension.
+    columns:
+      - name: owner_key
+        tests: [unique, not_null]
+      - name: owner_id
+        tests: [unique, not_null]
+
+  - name: dim_tenant
+    description: Tenant dimension.
+    columns:
+      - name: tenant_key
+        tests: [unique, not_null]
+      - name: tenant_id
+        tests: [unique, not_null]
+
+  - name: dim_property
+    description: Current property dimension; history is retained by the property_history snapshot.
+    columns:
+      - name: property_key
+        tests: [unique, not_null]
+      - name: property_id
+        tests: [unique, not_null]
+      - name: location_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
+      - name: owner_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_owner')
+                field: owner_key
+
+  - name: fact_rental_agreement
+    description: Rental-agreement fact at one row per agreement.
+    columns:
+      - name: rental_agreement_key
+        tests: [unique, not_null]
+      - name: property_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_property')
+                field: property_key
+      - name: tenant_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_tenant')
+                field: tenant_key
+
+  - name: fact_payment
+    description: Payment fact at one row per scheduled payment.
+    columns:
+      - name: payment_key
+        tests: [unique, not_null]
+      - name: rental_agreement_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('fact_rental_agreement')
+                field: rental_agreement_key
+
+  - name: fact_occupancy
+    description: Daily occupied-property fact derived from agreement date ranges.
+    columns:
+      - name: occupancy_key
+        tests: [unique, not_null]
+      - name: date_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+
+  - name: mart_occupancy
+    description: Monthly occupied and available property days by location.
+    columns:
+      - name: occupancy_rate
+        tests: [not_null]
+
+  - name: mart_monthly_rental_revenue
+    description: Paid rental revenue aggregated by location and payment month.
+    columns:
+      - name: rental_revenue
+        tests: [not_null]
+
+  - name: mart_overdue_payments
+    description: Payment-level overdue balance and delay details.
+
+  - name: mart_average_rent_per_sqm
+    description: Current average asking rent per square metre by location.
+    columns:
+      - name: average_rent_per_sqm
+        tests: [not_null]
+
+  - name: mart_agreements_expiring_soon
+    description: Agreements ending between the current date and 30 days from now.
+
+  - name: mart_rental_trends_by_location
+    description: Agreement rent trend and month-over-month change by location.
+
+snapshots:
+  - name: property_history
+    description: SCD Type 2 history for price, ownership, location, and selected property attributes.
+    columns:
+      - name: property_id
+        tests: [not_null]
+      - name: dbt_valid_from
+        tests: [not_null]
