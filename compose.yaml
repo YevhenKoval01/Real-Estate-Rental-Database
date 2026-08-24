@@ -1,0 +1,49 @@
+name: rental-analytics-platform
+
+services:
+  postgres:
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}
+      POSTGRES_PASSWORD: ${RENTAL_POSTGRES_PASSWORD:-rental_dev}
+      POSTGRES_DB: ${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+    ports:
+      - "${RENTAL_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./warehouse/migrations/001_create_staging.sql:/docker-entrypoint-initdb.d/001_create_staging.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  pipeline:
+    profiles: ["pipeline"]
+    build:
+      context: .
+      dockerfile: docker/pipeline.Dockerfile
+    environment:
+      RENTAL_POSTGRES_HOST: postgres
+      RENTAL_POSTGRES_PORT: 5432
+      RENTAL_POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}
+      RENTAL_POSTGRES_PASSWORD: ${RENTAL_POSTGRES_PASSWORD:-rental_dev}
+      RENTAL_POSTGRES_DATABASE: ${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+      RENTAL_BRONZE_PATH: /app/data/bronze
+      RENTAL_SILVER_PATH: /app/data/silver
+      RENTAL_RANDOM_SEED: ${RENTAL_RANDOM_SEED:-42}
+      RENTAL_DATASET_SIZE: ${RENTAL_DATASET_SIZE:-12}
+      RENTAL_LOG_LEVEL: ${RENTAL_LOG_LEVEL:-INFO}
+      RENTAL_SPARK_MASTER: local[*]
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
