@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rental-analytics-platform"
-version = "0.2.0"
+version = "1.0.0"
 description = "A reproducible rental analytics and data engineering platform"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -42,6 +42,7 @@ testpaths = ["tests"]
 markers = [
     "integration: requires a running PostgreSQL service",
     "airflow: requires the optional Airflow dependency",
+    "e2e: exercises the complete file and PostgreSQL pipeline",
 ]
 
 [tool.ruff]

@@ -13,10 +13,11 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY warehouse/dbt ./warehouse/dbt
+COPY bi ./bi
 
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir ".[warehouse]" \
-    && mkdir -p /app/data
+    && mkdir -p /app/data/benchmark
 
 ENTRYPOINT ["rental-platform"]
 CMD ["run"]

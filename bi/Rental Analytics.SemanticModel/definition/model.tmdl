@@ -1,0 +1,15 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	discourageImplicitMeasures
+	sourceQueryCulture: en-US
+
+ref table Occupancy
+ref table 'Rental Revenue'
+ref table 'Rent per Square Metre'
+ref table Payments
+ref table 'Expiring Agreements'
+ref table 'Rental Trends'
+
+ref expression DatabaseServer
+ref expression DatabaseName

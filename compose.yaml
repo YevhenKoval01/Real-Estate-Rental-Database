@@ -45,6 +45,7 @@ services:
       RENTAL_LOG_LEVEL: ${RENTAL_LOG_LEVEL:-INFO}
       RENTAL_SPARK_MASTER: local[*]
       RENTAL_DBT_PROJECT_PATH: /app/warehouse/dbt
+      RENTAL_BI_MODEL_PATH: /app/bi/Rental Analytics.SemanticModel
     volumes:
       - ./data:/app/data
     depends_on:
@@ -69,6 +70,34 @@ services:
       RENTAL_POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}
       RENTAL_POSTGRES_PASSWORD: ${RENTAL_POSTGRES_PASSWORD:-rental_dev}
       RENTAL_POSTGRES_DATABASE: ${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  smoke:
+    profiles: ["smoke"]
+    build:
+      context: .
+      dockerfile: docker/pipeline.Dockerfile
+    command: ["smoke", "--output", "/app/data/benchmark/smoke-evidence.json"]
+    environment:
+      RENTAL_POSTGRES_HOST: postgres
+      RENTAL_POSTGRES_PORT: 5432
+      RENTAL_POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}
+      RENTAL_POSTGRES_PASSWORD: ${RENTAL_POSTGRES_PASSWORD:-rental_dev}
+      RENTAL_POSTGRES_DATABASE: ${RENTAL_POSTGRES_DATABASE:-rental_analytics}
+      RENTAL_SOURCE_PATH: /app/data/source
+      RENTAL_BRONZE_PATH: /app/data/bronze
+      RENTAL_QUALITY_PATH: /app/data/quality
+      RENTAL_REJECTED_PATH: /app/data/rejected
+      RENTAL_SILVER_PATH: /app/data/silver
+      RENTAL_RANDOM_SEED: ${RENTAL_RANDOM_SEED:-42}
+      RENTAL_LOG_LEVEL: ${RENTAL_LOG_LEVEL:-INFO}
+      RENTAL_SPARK_MASTER: local[*]
+      RENTAL_DBT_PROJECT_PATH: /app/warehouse/dbt
+      RENTAL_BI_MODEL_PATH: /app/bi/Rental Analytics.SemanticModel
+    volumes:
+      - ./data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,6 +129,7 @@ services:
       RENTAL_SILVER_PATH: /app/data/silver
       RENTAL_SPARK_MASTER: local[*]
       RENTAL_DBT_PROJECT_PATH: /app/warehouse/dbt
+      RENTAL_BI_MODEL_PATH: /app/bi/Rental Analytics.SemanticModel
       DBT_POSTGRES_HOST: postgres
       DBT_POSTGRES_PORT: 5432
       DBT_POSTGRES_USER: ${RENTAL_POSTGRES_USER:-rental}

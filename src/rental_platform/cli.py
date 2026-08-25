@@ -3,9 +3,12 @@ import logging
 import os
 from collections.abc import Sequence
 from decimal import Decimal
+from pathlib import Path
 
 from pydantic import ValidationError
 
+from rental_platform.benchmark import run_index_benchmark
+from rental_platform.bi_validation import validate_semantic_model
 from rental_platform.config import Settings
 from rental_platform.errors import PipelineError
 from rental_platform.generator import generate_source_files, ingest_source_files
@@ -17,6 +20,7 @@ from rental_platform.pipeline import (
     validate_bronze_batch,
 )
 from rental_platform.quality import create_batch_id
+from rental_platform.smoke import run_complete_smoke_test
 from rental_platform.spark_pipeline import transform_bronze_to_silver
 
 LOGGER = logging.getLogger(__name__)
@@ -66,6 +70,17 @@ def _parser() -> argparse.ArgumentParser:
 
     summary_parser = subparsers.add_parser("summary")
     _add_batch_argument(summary_parser, required=True)
+
+    bi_parser = subparsers.add_parser("validate-bi")
+    bi_parser.add_argument("--model-path")
+    bi_parser.add_argument("--contract-path", default="bi/semantic-model-contract.json")
+
+    benchmark_parser = subparsers.add_parser("benchmark")
+    benchmark_parser.add_argument("--iterations", type=int, default=7)
+    benchmark_parser.add_argument("--output", default="data/benchmark/index-benchmark.json")
+
+    smoke_parser = subparsers.add_parser("smoke")
+    smoke_parser.add_argument("--output", default="data/benchmark/smoke-evidence.json")
     return parser
 
 
@@ -109,6 +124,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             load_silver_batch(settings, batch_id)
         elif arguments.command == "summary":
             publish_run_summary(settings, batch_id)
+        elif arguments.command == "validate-bi":
+            result = validate_semantic_model(
+                Path(arguments.model_path) if arguments.model_path else settings.bi_model_path,
+                Path(arguments.contract_path),
+            )
+            LOGGER.info(
+                "Power BI semantic model validated tables=%d measures=%d sources=%d",
+                result.table_count,
+                result.measure_count,
+                result.source_count,
+            )
+        elif arguments.command == "benchmark":
+            run_index_benchmark(
+                settings,
+                output_path=Path(arguments.output),
+                iterations=arguments.iterations,
+            )
+        elif arguments.command == "smoke":
+            run_complete_smoke_test(settings, Path(arguments.output))
         else:
             run_pipeline(
                 settings,
@@ -117,8 +151,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         return 0
     except (PipelineError, ValidationError, OSError, ValueError) as exc:
-        LOGGER.error("Command failed: %s", exc)
+        LOGGER.error(
+            "Command failed: %s",
+            exc,
+            extra={"event": "command_failed", "stage": arguments.command},
+        )
         return 1
+    except Exception:
+        LOGGER.exception(
+            "Command failed unexpectedly",
+            extra={"event": "command_failed_unexpected", "stage": arguments.command},
+        )
+        return 2
 
 
 def entrypoint() -> None:

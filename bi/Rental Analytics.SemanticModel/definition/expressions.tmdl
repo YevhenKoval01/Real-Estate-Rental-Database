@@ -1,0 +1,3 @@
+expression DatabaseServer = "localhost" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+expression DatabaseName = "rental_analytics" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]

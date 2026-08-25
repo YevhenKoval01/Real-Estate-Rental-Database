@@ -30,7 +30,7 @@ def create_batch_id(now: datetime | None = None) -> str:
 
 
 def _json_value(value: object) -> object:
-    if isinstance(value, (date, datetime)):
+    if isinstance(value, date | datetime):
         return value.isoformat()
     if isinstance(value, Decimal):
         return format(value, "f")

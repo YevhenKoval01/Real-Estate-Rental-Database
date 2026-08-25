@@ -17,7 +17,7 @@ with DAG(
     schedule=None,
     catchup=False,
     default_args={"owner": "data-engineering", "retries": 0},
-    tags=["rental", "analytics", "stage-2"],
+    tags=["rental", "analytics", "production-shaped"],
 ) as dag:
     generate = BashOperator(
         task_id="generate",

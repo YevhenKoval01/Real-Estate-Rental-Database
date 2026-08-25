@@ -124,3 +124,37 @@ def test_failed_run_can_be_audited() -> None:
     audit = read_pipeline_run(settings, "failed-load")
     assert audit["final_status"] == "FAILED"
     assert audit["failure_message"] == "simulated source failure"
+
+
+def test_failed_batch_id_can_be_recovered_safely() -> None:
+    settings, _ = _settings()
+    batch_id = "recovered-load"
+    start_pipeline_run(settings, batch_id, datetime(2025, 1, 1, tzinfo=UTC))
+    finish_pipeline_run(
+        settings,
+        batch_id,
+        quality=None,
+        metrics=None,
+        status="FAILED",
+        failure_message="temporary database outage",
+    )
+
+    quality = assess_quality(
+        build_source_data(2, 42),
+        batch_id=batch_id,
+        processed_at=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+    start_pipeline_run(settings, batch_id, datetime(2025, 1, 2, tzinfo=UTC))
+    metrics = load_incremental(quality, settings)
+    finish_pipeline_run(
+        settings,
+        batch_id,
+        quality=quality,
+        metrics=metrics,
+        status="SUCCESS",
+    )
+
+    recovered = read_pipeline_run(settings, batch_id)
+    assert recovered["final_status"] == "SUCCESS"
+    assert recovered["failure_message"] is None
+    assert recovered["accepted_count"] == quality.accepted_count

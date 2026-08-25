@@ -9,6 +9,7 @@ data/bronze/
 data/silver/
 data/quality/
 data/rejected/
+data/benchmark/
 postgres-data/
 *.parquet
 

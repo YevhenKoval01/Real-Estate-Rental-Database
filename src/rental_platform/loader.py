@@ -281,7 +281,7 @@ def _compatibility_quality(data: Dataset, batch_id: str) -> QualityResult:
 
 
 def load_staging(data: Dataset, settings: Settings) -> dict[str, int]:
-    """Compatibility helper for the Stage 1 smoke test; Stage 2 uses incremental loading."""
+    """Compatibility helper retained for the original foundation smoke test."""
 
     batch_id = f"compatibility-{utc_now().strftime('%Y%m%dT%H%M%S%f')}"
     quality = _compatibility_quality(data, batch_id)

@@ -1,0 +1,40 @@
+/// Monthly occupied property-days compared with available property-days.
+table Occupancy
+
+	measure 'Occupancy Rate' = DIVIDE(SUM(Occupancy[occupied_property_days]), SUM(Occupancy[available_property_days]))
+		formatString: 0.00%
+		displayFolder: Core KPIs
+
+	column city
+		dataType: string
+		sourceColumn: city
+		summarizeBy: none
+
+	column region
+		dataType: string
+		sourceColumn: region
+		summarizeBy: none
+
+	column month_start_date
+		dataType: dateTime
+		formatString: yyyy-mm
+		sourceColumn: month_start_date
+		summarizeBy: none
+
+	column occupied_property_days
+		dataType: int64
+		sourceColumn: occupied_property_days
+		summarizeBy: sum
+
+	column available_property_days
+		dataType: int64
+		sourceColumn: available_property_days
+		summarizeBy: sum
+
+	partition Occupancy = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database(DatabaseServer, DatabaseName, [Query = "select city, region, month_start_date, occupied_property_days, available_property_days from analytics_marts.mart_occupancy"])
+			in
+				Source

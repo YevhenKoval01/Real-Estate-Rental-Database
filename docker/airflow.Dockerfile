@@ -17,6 +17,7 @@ WORKDIR /app
 COPY --chown=airflow:root pyproject.toml README.md ./
 COPY --chown=airflow:root src ./src
 COPY --chown=airflow:root warehouse/dbt ./warehouse/dbt
+COPY --chown=airflow:root bi ./bi
 COPY --chown=airflow:root airflow/dags /opt/airflow/dags
 
 RUN python -m pip install --no-cache-dir ".[warehouse]" \

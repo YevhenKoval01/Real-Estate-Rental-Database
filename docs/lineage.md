@@ -14,6 +14,7 @@ flowchart LR
     I --> D[Gold dimensions and facts]
     D --> M[Analytical marts]
     P --> H[Property SCD2 snapshot]
+    M --> BI[Power BI TMDL semantic model]
 ```
 
 - Source is a reproducible external-system simulation. A separate ingest step copies it without mutation to Bronze.
@@ -22,5 +23,6 @@ flowchart LR
 - PostgreSQL staging stores the current accepted business state, rejection history, and run audit. Fingerprints decide insert, update, or skip.
 - dbt staging views rename no business concepts; intermediate views resolve domain joins; Gold tables implement a star schema; marts expose business-ready aggregates.
 - `property_history` snapshots changing property price and selected attributes independently of the current-state property dimension.
+- The Power BI import model reads six explicit Gold/mart queries and adds DAX measures without embedding database credentials.
 
 The Airflow DAG follows the executable chain `generate -> ingest -> validate -> transform -> load -> dbt_build -> publish_run_summary`. Each task calls the same CLI or dbt command documented for manual operation.

@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from time import perf_counter
 
 from rental_platform.bronze import read_bronze
 from rental_platform.config import Settings
@@ -89,16 +90,18 @@ def run_pipeline(
     """Run source generation through incremental PostgreSQL loading."""
 
     current_batch = batch_id or create_batch_id()
+    started_clock = perf_counter()
     started_at = utc_now()
     audit_started = False
     quality: QualityResult | None = None
     metrics = LoadMetrics()
     LOGGER.info(
-        "Starting Stage 2 pipeline batch_id=%s dataset_size=%d seed=%d quality_issues=%d",
+        "Starting rental analytics pipeline batch_id=%s dataset_size=%d seed=%d quality_issues=%d",
         current_batch,
         settings.dataset_size,
         settings.random_seed,
         settings.quality_issue_count,
+        extra={"event": "pipeline_started", "batch_id": current_batch, "stage": "pipeline"},
     )
     if not skip_load:
         start_pipeline_run(settings, current_batch, started_at)
@@ -129,7 +132,7 @@ def run_pipeline(
             load_metrics=metrics,
         )
         LOGGER.info(
-            "Stage 2 pipeline completed batch_id=%s input=%d accepted=%d rejected=%d "
+            "Rental analytics pipeline completed batch_id=%s input=%d accepted=%d rejected=%d "
             "inserted=%d updated=%d skipped=%d",
             result.batch_id,
             result.quality.input_count,
@@ -138,9 +141,31 @@ def run_pipeline(
             result.load_metrics.inserted_count,
             result.load_metrics.updated_count,
             result.load_metrics.skipped_count,
+            extra={
+                "event": "pipeline_completed",
+                "batch_id": current_batch,
+                "stage": "pipeline",
+                "input_count": result.quality.input_count,
+                "accepted_count": result.quality.accepted_count,
+                "rejected_count": result.quality.rejected_count,
+                "inserted_count": result.load_metrics.inserted_count,
+                "updated_count": result.load_metrics.updated_count,
+                "skipped_count": result.load_metrics.skipped_count,
+                "duration_ms": round((perf_counter() - started_clock) * 1000, 2),
+            },
         )
         return result
     except Exception as exc:
+        LOGGER.exception(
+            "Rental analytics pipeline failed batch_id=%s",
+            current_batch,
+            extra={
+                "event": "pipeline_failed",
+                "batch_id": current_batch,
+                "stage": "pipeline",
+                "duration_ms": round((perf_counter() - started_clock) * 1000, 2),
+            },
+        )
         if audit_started:
             finish_pipeline_run(
                 settings,

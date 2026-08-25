@@ -1,0 +1,35 @@
+/// Paid rental revenue summarized by location and month.
+table 'Rental Revenue'
+
+	measure 'Monthly Rental Revenue' = SUM('Rental Revenue'[rental_revenue])
+		formatString: #,0.00 "PLN"
+		displayFolder: Core KPIs
+
+	column city
+		dataType: string
+		sourceColumn: city
+		summarizeBy: none
+
+	column region
+		dataType: string
+		sourceColumn: region
+		summarizeBy: none
+
+	column revenue_month
+		dataType: dateTime
+		formatString: yyyy-mm
+		sourceColumn: revenue_month
+		summarizeBy: none
+
+	column rental_revenue
+		dataType: decimal
+		sourceColumn: rental_revenue
+		summarizeBy: sum
+
+	partition 'Rental Revenue' = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database(DatabaseServer, DatabaseName, [Query = "select city, region, revenue_month, rental_revenue from analytics_marts.mart_monthly_rental_revenue"])
+			in
+				Source

@@ -1,5 +1,5 @@
 name: rental_analytics
-version: "0.2.0"
+version: "1.0.0"
 config-version: 2
 
 profile: rental_analytics

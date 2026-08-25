@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     spark_master: str = "local[*]"
     dbt_project_path: Path = Path("warehouse/dbt")
+    bi_model_path: Path = Path("bi/Rental Analytics.SemanticModel")
 
     @field_validator("postgres_host", "postgres_user", "postgres_database", "spark_master")
     @classmethod

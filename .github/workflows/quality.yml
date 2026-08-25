@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  stage-2:
+  final-platform:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -52,10 +52,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install package and development tools
+      - name: Install pipeline, warehouse, and development tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --editable ".[dev,warehouse,orchestration]"
+          python -m pip install --editable ".[dev,warehouse]"
+
+      - name: Install isolated Airflow test environment
+        run: |
+          python -m venv .airflow-venv
+          .airflow-venv/bin/python -m pip install --upgrade pip
+          .airflow-venv/bin/python -m pip install --editable ".[dev,orchestration]"
+          .airflow-venv/bin/python -m pip check
 
       - name: Lint and format check
         run: |
@@ -64,8 +71,12 @@ jobs:
 
       - name: Compile and build package
         run: |
-          python -m compileall -q src
+          python -m compileall -q src airflow/dags
           python -m build
+          python -m pip check
+
+      - name: Validate Power BI semantic model
+        run: rental-platform validate-bi
 
       - name: Validate Docker Compose
         run: docker compose --profile pipeline --profile airflow config --quiet
@@ -80,11 +91,14 @@ jobs:
               --file "$migration"
           done
 
-      - name: Run the Stage 2 pipeline
+      - name: Run the deterministic pipeline
         run: rental-platform run --batch-id ci-full-load
 
       - name: Build and test the dbt warehouse
         run: dbt build --project-dir warehouse/dbt --profiles-dir warehouse/dbt
 
-      - name: Run tests
-        run: pytest
+      - name: Run pipeline, integration, and end-to-end tests
+        run: pytest --ignore=tests/airflow
+
+      - name: Validate Airflow DAG in its isolated environment
+        run: .airflow-venv/bin/pytest tests/airflow

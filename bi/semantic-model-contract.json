@@ -1,0 +1,56 @@
+{
+  "name": "Rental Analytics",
+  "version": 1,
+  "sources": [
+    {
+      "relation": "analytics_marts.mart_occupancy",
+      "table": "Occupancy"
+    },
+    {
+      "relation": "analytics_marts.mart_monthly_rental_revenue",
+      "table": "Rental Revenue"
+    },
+    {
+      "relation": "analytics_marts.mart_average_rent_per_sqm",
+      "table": "Rent per Square Metre"
+    },
+    {
+      "relation": "analytics.fact_payment",
+      "table": "Payments"
+    },
+    {
+      "relation": "analytics_marts.mart_agreements_expiring_soon",
+      "table": "Expiring Agreements"
+    },
+    {
+      "relation": "analytics_marts.mart_rental_trends_by_location",
+      "table": "Rental Trends"
+    }
+  ],
+  "measures": [
+    {
+      "name": "Occupancy Rate",
+      "table": "Occupancy"
+    },
+    {
+      "name": "Monthly Rental Revenue",
+      "table": "Rental Revenue"
+    },
+    {
+      "name": "Average Rent per Square Metre",
+      "table": "Rent per Square Metre"
+    },
+    {
+      "name": "Overdue Payment Rate",
+      "table": "Payments"
+    },
+    {
+      "name": "Agreements Expiring within 30 Days",
+      "table": "Expiring Agreements"
+    },
+    {
+      "name": "Rental Price Trend by Location",
+      "table": "Rental Trends"
+    }
+  ]
+}

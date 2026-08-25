@@ -1,0 +1,40 @@
+/// Monthly agreement rent and its prior-month change by location.
+table 'Rental Trends'
+
+	measure 'Rental Price Trend by Location' =
+			VAR CurrentMonth = MAX('Rental Trends'[agreement_month])
+			VAR CurrentRent = CALCULATE(AVERAGE('Rental Trends'[average_monthly_rent]), 'Rental Trends'[agreement_month] = CurrentMonth)
+			VAR PreviousMonth = MAXX(FILTER(ALL('Rental Trends'[agreement_month]), 'Rental Trends'[agreement_month] < CurrentMonth), 'Rental Trends'[agreement_month])
+			VAR PreviousRent = CALCULATE(AVERAGE('Rental Trends'[average_monthly_rent]), 'Rental Trends'[agreement_month] = PreviousMonth)
+			RETURN CurrentRent - PreviousRent
+		formatString: #,0.00 "PLN"
+		displayFolder: Core KPIs
+
+	column city
+		dataType: string
+		sourceColumn: city
+		summarizeBy: none
+
+	column region
+		dataType: string
+		sourceColumn: region
+		summarizeBy: none
+
+	column agreement_month
+		dataType: dateTime
+		formatString: yyyy-mm
+		sourceColumn: agreement_month
+		summarizeBy: none
+
+	column average_monthly_rent
+		dataType: decimal
+		sourceColumn: average_monthly_rent
+		summarizeBy: none
+
+	partition 'Rental Trends' = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database(DatabaseServer, DatabaseName, [Query = "select city, region, agreement_month, average_monthly_rent from analytics_marts.mart_rental_trends_by_location"])
+			in
+				Source

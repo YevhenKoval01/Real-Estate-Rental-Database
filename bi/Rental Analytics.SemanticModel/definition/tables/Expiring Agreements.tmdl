@@ -1,0 +1,34 @@
+/// Active agreements that end during the next 30 days at warehouse refresh time.
+table 'Expiring Agreements'
+
+	measure 'Agreements Expiring within 30 Days' = COUNTROWS('Expiring Agreements')
+		formatString: #,0
+		displayFolder: Core KPIs
+
+	column city
+		dataType: string
+		sourceColumn: city
+		summarizeBy: none
+
+	column agreement_id
+		dataType: string
+		sourceColumn: agreement_id
+		summarizeBy: none
+
+	column end_date
+		dataType: dateTime
+		sourceColumn: end_date
+		summarizeBy: none
+
+	column days_until_expiration
+		dataType: int64
+		sourceColumn: days_until_expiration
+		summarizeBy: none
+
+	partition 'Expiring Agreements' = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database(DatabaseServer, DatabaseName, [Query = "select agreement_id, city, end_date, days_until_expiration from analytics_marts.mart_agreements_expiring_soon"])
+			in
+				Source

@@ -2,8 +2,14 @@
 
 The manually triggered `rental_analytics_pipeline` DAG uses Airflow 2.11.2 and a stable, sanitized `run_id` as the batch ID:
 
-```text
-generate -> ingest -> validate -> transform -> load -> dbt_build -> publish_run_summary
+```mermaid
+flowchart LR
+    G[generate] --> I[ingest]
+    I --> V[validate]
+    V --> T[transform]
+    T --> L[load]
+    L --> D[dbt_build]
+    D --> S[publish_run_summary]
 ```
 
 All tasks are `BashOperator` calls to real project entry points. Generation currently also refreshes Bronze for backward-compatible Stage 1 CLI behavior, so the explicit ingest task repeats that copy safely and makes the architectural boundary visible. Validation produces early quality feedback; transformation repeats the same deterministic rules while writing typed Silver Parquet.

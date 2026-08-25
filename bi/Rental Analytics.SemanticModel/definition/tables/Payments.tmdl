@@ -1,0 +1,44 @@
+/// Payment fact used for settlement and overdue-rate analysis.
+table Payments
+
+	measure 'Overdue Payment Rate' = DIVIDE(CALCULATE(COUNTROWS(Payments), Payments[is_overdue] = TRUE()), COUNTROWS(Payments))
+		formatString: 0.00%
+		displayFolder: Core KPIs
+
+	column city
+		dataType: string
+		sourceColumn: city
+		summarizeBy: none
+
+	column due_date
+		dataType: dateTime
+		sourceColumn: due_date
+		summarizeBy: none
+
+	column payment_date
+		dataType: dateTime
+		sourceColumn: payment_date
+		summarizeBy: none
+
+	column amount
+		dataType: decimal
+		sourceColumn: amount
+		summarizeBy: sum
+
+	column status
+		dataType: string
+		sourceColumn: status
+		summarizeBy: none
+
+	column is_overdue
+		dataType: boolean
+		sourceColumn: is_overdue
+		summarizeBy: none
+
+	partition Payments = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database(DatabaseServer, DatabaseName, [Query = "select location.city, payment.due_date, payment.payment_date, payment.amount, payment.status, payment.is_overdue from analytics.fact_payment as payment join analytics.dim_location as location on payment.location_key = location.location_key"])
+			in
+				Source

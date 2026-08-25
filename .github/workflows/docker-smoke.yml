@@ -1,0 +1,36 @@
+name: docker-smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  clean-platform-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Compose model
+        run: docker compose --profile pipeline --profile airflow --profile smoke config --quiet
+
+      - name: Run complete clean-state smoke test
+        run: |
+          docker compose down --volumes --remove-orphans
+          docker compose --profile smoke run --build --rm smoke
+
+      - name: Show smoke evidence
+        run: cat data/benchmark/smoke-evidence.json
+
+      - name: Upload smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rental-platform-smoke-evidence
+          path: data/benchmark/smoke-evidence.json
+
+      - name: Remove smoke services and volume
+        if: always()
+        run: docker compose down --volumes --remove-orphans

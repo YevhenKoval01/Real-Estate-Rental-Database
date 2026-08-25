@@ -1,6 +1,6 @@
 # Data dictionary
 
-Stage 2 uses PostgreSQL `staging` as the durable incremental boundary and dbt schemas for analytical data. Monetary values use the record currency; generated development data uses PLN.
+PostgreSQL `staging` is the durable incremental boundary and dbt schemas contain analytical data. Monetary values use the record currency; generated development data uses PLN.
 
 ## Staging and operational tables
 
